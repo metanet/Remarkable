@@ -62,6 +62,8 @@ app_version = 1.87 #Remarkable app version
 
 class RemarkableWindow(Window):
     __gtype_name__ = "RemarkableWindow"
+    current_pos_text = ""
+    doc_stats_text = ""
     
     def finish_initializing(self, builder): # pylint: disable=E1002
         """Set up the main window"""
@@ -79,7 +81,7 @@ class RemarkableWindow(Window):
         self.settings_path = os.path.join(self.path, "remarkable.settings")
         self.media_path = remarkableconfig.get_data_path() + os.path.sep + "media" + os.path.sep
         self.name = "Untitled" #Title of the current file, set to 'Untitled' as default
-
+        
         self.default_html_start = '<!doctype HTML><html><head><meta charset="utf-8"><title>Made with Remarkable!</title><link rel="stylesheet" href="' + self.media_path + 'highlightjs.default.min.css">'
         self.default_html_start += "<style type='text/css'>" + styles.get() + "</style>"
         self.default_html_start += "</head><body id='MathPreviewF'>"
@@ -109,9 +111,11 @@ class RemarkableWindow(Window):
         self.undo_manager.connect("can-redo-changed", self.can_redo_changed)
 
         self.text_buffer.connect("changed", self.on_text_view_changed)
+        self.text_buffer.connect("notify::cursor-position", self.on_cursor_position_changed)
         self.text_view.set_buffer(self.text_buffer)
         self.text_view.set_wrap_mode(Gtk.WrapMode.WORD)
         self.text_view.connect('key-press-event', self.cursor_ctrl_arrow_rtl_fix)
+        
 
         self.live_preview = WebKit2.WebView()
 
@@ -1531,7 +1535,14 @@ class RemarkableWindow(Window):
 
                 return True
 
-        return False
+        return False   
+    
+    def on_cursor_position_changed(self, buffer, data=None):
+        current_line_iter = self.text_buffer.get_iter_at_mark(self.text_buffer.get_insert())
+        self.current_pos_text = str(current_line_iter.get_line() + 1) + ":" + str(current_line_iter.get_line_offset())
+        self.status_message = self.current_pos_text + " | " + self.doc_stats_text
+        self.statusbar.push(self.context_id, self.status_message)
+    
 
     """
         Update the text in the status bar. Displays the number of lines,
@@ -1546,11 +1557,18 @@ class RemarkableWindow(Window):
         word_exceptions = ["#", "##", "###", "####", "#####", "######", "*", "**", "-", "+", "_", "/", "\\", "/", ":",
                            ";", "@", "'", "~", "(", ")", "[", "]", "{", "}", "((", "))", "+-", "-+", "/=", ".", "|",
                            "!", "!!", "!!!", "$", "", "%", "^", "&"]  # Exclude these from word count
+        
+        if not self.current_pos_text:
+            current_line_iter = self.text_buffer.get_iter_at_mark(self.text_buffer.get_insert())
+            self.current_pos_text = str(current_line_iter.get_line() + 1) + ":" + str(current_line_iter.get_line_offset())
+        
         for w in words:
             if w not in word_exceptions:
                 if not re.match('^[0-9]{1,3}$', w):
                     word_count += 1
-        self.status_message = "Lines: " + str(lines) + ", " + "Words: " + str(word_count) + ", Characters: " + str(chars)
+
+        self.doc_stats_text = "Lines: " + str(lines) + ", " + "Words: " + str(word_count) + ", Characters: " + str(chars)
+        self.status_message = self.current_pos_text + " | " + self.doc_stats_text
         self.statusbar.push(self.context_id, self.status_message)
 
     def update_live_preview(self, widet):
