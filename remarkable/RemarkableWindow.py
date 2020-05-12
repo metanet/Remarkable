@@ -62,8 +62,6 @@ app_version = 1.87 #Remarkable app version
 
 class RemarkableWindow(Window):
     __gtype_name__ = "RemarkableWindow"
-    current_pos_text = ""
-    doc_stats_text = ""
     
     def finish_initializing(self, builder): # pylint: disable=E1002
         """Set up the main window"""
@@ -81,7 +79,9 @@ class RemarkableWindow(Window):
         self.settings_path = os.path.join(self.path, "remarkable.settings")
         self.media_path = remarkableconfig.get_data_path() + os.path.sep + "media" + os.path.sep
         self.name = "Untitled" #Title of the current file, set to 'Untitled' as default
-        
+        self.cursor_position_text = ""
+        self.document_stats_text = ""
+
         self.default_html_start = '<!doctype HTML><html><head><meta charset="utf-8"><title>Made with Remarkable!</title><link rel="stylesheet" href="' + self.media_path + 'highlightjs.default.min.css">'
         self.default_html_start += "<style type='text/css'>" + styles.get() + "</style>"
         self.default_html_start += "</head><body id='MathPreviewF'>"
@@ -1536,14 +1536,19 @@ class RemarkableWindow(Window):
                 return True
 
         return False   
-    
-    def on_cursor_position_changed(self, buffer, data=None):
-        current_line_iter = self.text_buffer.get_iter_at_mark(self.text_buffer.get_insert())
-        self.current_pos_text = str(current_line_iter.get_line() + 1) + ":" + str(current_line_iter.get_line_offset())
-        self.status_message = self.current_pos_text + " | " + self.doc_stats_text
+
+    def update_cursor_position_text(self):
+        current_line_it = self.text_buffer.get_iter_at_mark(self.text_buffer.get_insert())
+        self.cursor_position_text = str(current_line_it.get_line() + 1) + ":" + str(current_line_it.get_line_offset())
+
+    def push_status_message(self):
+        self.status_message = self.cursor_position_text + " | " + self.document_stats_text
         self.statusbar.push(self.context_id, self.status_message)
     
-
+    def on_cursor_position_changed(self, buffer, data=None):
+        self.update_cursor_position_text()
+        self.push_status_message()
+    
     """
         Update the text in the status bar. Displays the number of lines,
         words and characters. This approach is possible inefficient.
@@ -1558,18 +1563,16 @@ class RemarkableWindow(Window):
                            ";", "@", "'", "~", "(", ")", "[", "]", "{", "}", "((", "))", "+-", "-+", "/=", ".", "|",
                            "!", "!!", "!!!", "$", "", "%", "^", "&"]  # Exclude these from word count
         
-        if not self.current_pos_text:
-            current_line_iter = self.text_buffer.get_iter_at_mark(self.text_buffer.get_insert())
-            self.current_pos_text = str(current_line_iter.get_line() + 1) + ":" + str(current_line_iter.get_line_offset())
+        if not self.cursor_position_text:
+            self.update_cursor_position_text()
         
         for w in words:
             if w not in word_exceptions:
                 if not re.match('^[0-9]{1,3}$', w):
                     word_count += 1
 
-        self.doc_stats_text = "Lines: " + str(lines) + ", " + "Words: " + str(word_count) + ", Characters: " + str(chars)
-        self.status_message = self.current_pos_text + " | " + self.doc_stats_text
-        self.statusbar.push(self.context_id, self.status_message)
+        self.document_stats_text = "Lines: " + str(lines) + ", " + "Words: " + str(word_count) + ", Characters: " + str(chars)
+        self.push_status_message()
 
     def update_live_preview(self, widet):
         text = self.text_buffer.get_text(self.text_buffer.get_start_iter(), self.text_buffer.get_end_iter(), False)
@@ -1604,3 +1607,4 @@ class RemarkableWindow(Window):
 
     def set_file_chooser_path(self, chooser):
         chooser.set_current_folder(os.path.dirname(self.name))
+
